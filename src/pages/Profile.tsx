@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
-import { Course, mockCourses } from '@/lib/mockData';
-import { BookOpen, Edit, LogOut } from 'lucide-react';
+import { BookOpen, Edit, LogOut, X } from 'lucide-react';
 import { getAvatarColor } from '@/lib/avatarColors';
+import { getEnrolledCourses, unenrollFromCourse, Course } from '@/lib/courseManager';
 import { 
   BottomSheet, 
   BottomSheetContent, 
@@ -38,15 +38,31 @@ export default function Profile() {
       return;
     }
 
-    const courses = JSON.parse(localStorage.getItem('courses') || JSON.stringify(mockCourses));
-    const enrolled = courses.filter((c: Course) => c.enrolledStudents.includes(user.id));
-    setEnrolledCourses(enrolled);
+    loadEnrolledCourses();
   }, [user, navigate]);
+
+  const loadEnrolledCourses = async () => {
+    if (!user) return;
+    const courses = await getEnrolledCourses(user.id);
+    setEnrolledCourses(courses);
+  };
 
   const handleUpdateProfile = () => {
     updateUser(editForm);
     setShowEditDialog(false);
     toast({ title: 'Profile updated!' });
+  };
+
+  const handleUnenroll = async (courseId: string, courseTitle: string) => {
+    if (!user) return;
+    
+    const success = await unenrollFromCourse(courseId, user.id);
+    if (success) {
+      toast({ title: `Unenrolled from ${courseTitle}` });
+      await loadEnrolledCourses();
+    } else {
+      toast({ title: 'Failed to unenroll', variant: 'destructive' });
+    }
   };
 
   if (!user) return null;
@@ -130,24 +146,39 @@ export default function Profile() {
                 {enrolledCourses.map((course) => (
                   <div
                     key={course.id}
-                    className="flex items-center gap-3 p-3 border rounded-lg active:scale-[0.98] transition-transform cursor-pointer"
-                    onClick={() => navigate(`/course/${course.id}`)}
+                    className="flex items-center gap-3 p-3 border rounded-lg"
                   >
                     <img
                       src={course.thumbnail}
                       alt={course.title}
-                      className="w-16 h-16 object-cover rounded flex-shrink-0"
+                      className="w-16 h-16 object-cover rounded flex-shrink-0 cursor-pointer"
                       loading="lazy"
+                      onClick={() => navigate(`/course/${course.id}`)}
                     />
-                    <div className="flex-1 min-w-0">
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => navigate(`/course/${course.id}`)}
+                    >
                       <h3 className="font-semibold text-sm line-clamp-1">{course.title}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         <BookOpen className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
-                          {course.lessons.length} lessons
+                          {course.duration || 'N/A'}
                         </span>
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="flex-shrink-0 h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUnenroll(course.id, course.title);
+                      }}
+                      title="Unenroll from course"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>

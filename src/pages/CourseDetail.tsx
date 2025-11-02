@@ -328,7 +328,7 @@ export default function CourseDetail() {
             )}
             
             {/* Navigation Buttons Overlay */}
-            <div className="absolute inset-x-0 bottom-4 flex justify-between px-4 pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
               <Button
                 variant="secondary"
                 size="icon"

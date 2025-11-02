@@ -45,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTimeout(() => loadUserProfile(session.user), 0);
         } else {
           setUser(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -55,8 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       if (session?.user) {
         loadUserProfile(session.user);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -100,6 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error in loadUserProfile:', error);
+    } finally {
+      setLoading(false);
     }
   };
 

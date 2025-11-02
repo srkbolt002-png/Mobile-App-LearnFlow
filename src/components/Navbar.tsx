@@ -9,7 +9,7 @@ import { NotificationCenter } from '@/components/NotificationCenter';
 import { NetworkStatus } from '@/components/NetworkStatus';
 
 export function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -31,9 +31,11 @@ export function Navbar() {
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" onClick={() => navigate('/login')} className="touch-target">
-              Login
-            </Button>
+            {!loading && (
+              <Button variant="ghost" onClick={() => navigate('/login')} className="touch-target">
+                Login
+              </Button>
+            )}
           </div>
         </div>
       </header>

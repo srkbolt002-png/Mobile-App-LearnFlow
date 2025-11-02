@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface OptimizedImageProps {
@@ -22,56 +22,21 @@ export function OptimizedImage({
   priority = false 
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [imageSrc, setImageSrc] = useState<string>('');
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    const img = new Image();
-    
-    img.onload = () => {
-      setImageSrc(src);
-      setIsLoading(false);
-    };
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
 
-    img.onerror = () => {
-      setImageSrc('/placeholder.svg');
-      setIsLoading(false);
-      setError(true);
-    };
-
-    // Start loading immediately for priority images, otherwise use IntersectionObserver
-    if (priority) {
-      img.src = src;
-    } else {
-      // Lazy load with IntersectionObserver
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            img.src = src;
-            observer.disconnect();
-          }
-        });
-      }, {
-        rootMargin: '50px', // Start loading 50px before image enters viewport
-      });
-
-      const element = document.querySelector(`[data-src="${src}"]`);
-      if (element) {
-        observer.observe(element);
-      } else {
-        // Fallback: load immediately if element not found
-        img.src = src;
-      }
-
-      return () => observer.disconnect();
-    }
-  }, [src, priority]);
+  const handleError = () => {
+    setIsLoading(false);
+    setError(true);
+  };
 
   return (
     <div 
       className={cn("relative overflow-hidden bg-muted", className)}
       style={{ aspectRatio }}
-      data-src={src}
     >
       {/* Blur placeholder - shows while loading */}
       {isLoading && (
@@ -84,19 +49,18 @@ export function OptimizedImage({
       )}
       
       {/* Actual image */}
-      {imageSrc && (
-        <img
-          src={imageSrc}
-          alt={alt}
-          className={cn(
-            "w-full h-full object-cover transition-opacity duration-500",
-            isLoading ? "opacity-0" : "opacity-100"
-          )}
-          loading={priority ? "eager" : "lazy"}
-          decoding="async"
-          {...(priority ? {} : { fetchpriority: 'low' })}
-        />
-      )}
+      <img
+        src={error ? '/placeholder.svg' : src}
+        alt={alt}
+        className={cn(
+          "w-full h-full object-cover transition-opacity duration-300",
+          isLoading ? "opacity-0" : "opacity-100"
+        )}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        onLoad={handleLoad}
+        onError={handleError}
+      />
     </div>
   );
 }

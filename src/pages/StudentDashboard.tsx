@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { mockCourses, Course } from '@/lib/mockData';
 import { Clock, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,54 +9,75 @@ import { initializeCourseProgress, getCourseProgress } from '@/lib/progressManag
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { OptimizedImage } from '@/components/OptimizedImage';
 import { triggerHaptic } from '@/lib/haptics';
+import { getEnrolledCourses, Course } from '@/lib/courseManager';
+import { getCourseLessons } from '@/lib/lessonManager';
+import { SkeletonList } from '@/components/SkeletonList';
+
+interface EnrolledCourseWithLessons extends Course {
+  lessonCount: number;
+}
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourseWithLessons[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const loadCourses = () => {
-    const saved = localStorage.getItem('courses');
-    if (saved) {
-      setCourses(JSON.parse(saved));
-    } else {
-      localStorage.setItem('courses', JSON.stringify(mockCourses));
-      setCourses(mockCourses);
-    }
-  };
-
-  useEffect(() => {
-    loadCourses();
-  }, []);
-
-  const handleRefresh = async () => {
-    loadCourses();
-  };
-
-  // Memoize enrolled courses computation
-  useEffect(() => {
-    if (user && courses.length > 0) {
-      const enrolled = courses.filter(course => 
-        course.enrolledStudents.includes(user.id)
-      );
-      setEnrolledCourses(enrolled);
-      
-      // Initialize progress tracking for enrolled courses
-      enrolled.forEach(course => {
+  const loadCourses = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    const enrolled = await getEnrolledCourses(user.id);
+    
+    // Fetch lesson count for each course
+    const enrolledWithLessons = await Promise.all(
+      enrolled.map(async (course) => {
+        const lessons = await getCourseLessons(course.id);
+        
+        // Initialize progress tracking
         const existingProgress = getCourseProgress(user.id, course.id);
-        if (!existingProgress) {
-          const lessonIds = course.lessons.map(l => l.id);
+        if (!existingProgress && lessons.length > 0) {
+          const lessonIds = lessons.map(l => l.id);
           initializeCourseProgress(user.id, course.id, lessonIds);
         }
-      });
-    }
-  }, [user, courses]);
+        
+        return {
+          ...course,
+          lessonCount: lessons.length
+        };
+      })
+    );
+    
+    setEnrolledCourses(enrolledWithLessons);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadCourses();
+  }, [user]);
+
+  const handleRefresh = async () => {
+    await loadCourses();
+  };
 
   const handleCourseClick = (courseId: string) => {
     triggerHaptic('light');
     navigate(`/course/${courseId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pb-[calc(5rem+var(--sab))]">
+        <div className="w-full px-4 py-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-display font-bold mb-2">My Dashboard</h1>
+            <div className="h-4 bg-muted animate-pulse rounded w-48"></div>
+          </div>
+          <SkeletonList count={3} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
@@ -96,17 +116,17 @@ export default function StudentDashboard() {
                       <h3 className="font-semibold text-sm line-clamp-2 mb-1">{course.title}</h3>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                         <Clock className="h-3 w-3" />
-                        <span>{course.lessons.length} lessons</span>
+                        <span>{course.lessonCount} lessons</span>
                       </div>
                       <Badge 
                         variant="secondary" 
                         className={`text-xs capitalize ${
-                          course.difficulty === 'beginner' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
-                          course.difficulty === 'intermediate' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                          course.level === 'beginner' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                          course.level === 'intermediate' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
                           'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                         }`}
                       >
-                        {course.difficulty}
+                        {course.level}
                       </Badge>
                     </div>
                   </div>

@@ -1,18 +1,27 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, Users, Award, Rocket } from 'lucide-react';
+import { BookOpen, Users, Award, Rocket, Loader2 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { mockCourses, mockUsers, Course } from '@/lib/mockData';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { CourseCard } from '@/components/CourseCard';
 import { triggerHaptic } from '@/lib/haptics';
 import { getAvatarColor } from '@/lib/avatarColors';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Auto-redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate('/student/dashboard', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     loadCourses();
@@ -42,6 +51,19 @@ export default function Home() {
     triggerHaptic('light');
     navigate(path);
   };
+
+  // Show loading splash while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-primary" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="min-h-screen flex flex-col bg-background">
@@ -66,7 +88,7 @@ export default function Home() {
               Explore Courses
               <BookOpen className="ml-2 h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" onClick={() => handleButtonClick('/login')} className="w-full touch-target h-12">
+            <Button size="lg" variant="outline" onClick={() => handleButtonClick(user ? '/student/dashboard' : '/login')} className="w-full touch-target h-12">
               Login to Your Account
             </Button>
           </div>
