@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { mockCourses, mockUsers, Course } from '@/lib/mockData';
-import { Users as UsersIcon, Clock, BookOpen } from 'lucide-react';
-import { getAvatarColor } from '@/lib/avatarColors';
+import { Card, CardContent } from '@/components/ui/card';
+import { mockCourses, Course } from '@/lib/mockData';
+import { Clock, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { initializeCourseProgress, getCourseProgress } from '@/lib/progressManager';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { OptimizedImage } from '@/components/OptimizedImage';
+import { triggerHaptic } from '@/lib/haptics';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -35,6 +35,7 @@ export default function StudentDashboard() {
     loadCourses();
   };
 
+  // Memoize enrolled courses computation
   useEffect(() => {
     if (user && courses.length > 0) {
       const enrolled = courses.filter(course => 
@@ -52,6 +53,11 @@ export default function StudentDashboard() {
       });
     }
   }, [user, courses]);
+
+  const handleCourseClick = (courseId: string) => {
+    triggerHaptic('light');
+    navigate(`/course/${courseId}`);
+  };
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
@@ -73,48 +79,39 @@ export default function StudentDashboard() {
 
           {enrolledCourses.length > 0 ? (
             <div className="space-y-3">
-              {enrolledCourses.map((course) => {
-                const instructor = mockUsers.find(u => u.id === course.instructorId);
-                const avatarColor = instructor ? getAvatarColor(instructor.name) : '';
-                const totalDuration = course.lessons.reduce((acc, lesson) => {
-                  const mins = parseInt(lesson.duration);
-                  return acc + (isNaN(mins) ? 0 : mins);
-                }, 0);
-                
-                return (
-                  <Card 
-                    key={course.id} 
-                    className="cursor-pointer border active:scale-[0.98] transition-transform"
-                    onClick={() => navigate(`/course/${course.id}`)}
-                  >
-                    <div className="flex gap-3 p-3">
-                      <img 
-                        src={course.thumbnail} 
-                        alt={course.title}
-                        className="w-20 h-20 rounded object-cover flex-shrink-0"
-                        loading="lazy"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm line-clamp-2 mb-1">{course.title}</h3>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <Clock className="h-3 w-3" />
-                          <span>{course.lessons.length} lessons</span>
-                        </div>
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs capitalize ${
-                            course.difficulty === 'beginner' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
-                            course.difficulty === 'intermediate' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
-                            'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                          }`}
-                        >
-                          {course.difficulty}
-                        </Badge>
+              {enrolledCourses.map((course) => (
+                <Card 
+                  key={course.id} 
+                  className="cursor-pointer border active:scale-[0.98] transition-transform"
+                  onClick={() => handleCourseClick(course.id)}
+                >
+                  <div className="flex gap-3 p-3">
+                    <OptimizedImage 
+                      src={course.thumbnail} 
+                      alt={course.title}
+                      className="w-20 h-20 rounded flex-shrink-0"
+                      aspectRatio="1/1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm line-clamp-2 mb-1">{course.title}</h3>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Clock className="h-3 w-3" />
+                        <span>{course.lessons.length} lessons</span>
                       </div>
+                      <Badge 
+                        variant="secondary" 
+                        className={`text-xs capitalize ${
+                          course.difficulty === 'beginner' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                          course.difficulty === 'intermediate' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                          'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {course.difficulty}
+                      </Badge>
                     </div>
-                  </Card>
-                );
-              })}
+                  </div>
+                </Card>
+              ))}
             </div>
           ) : (
             <Card className="border">

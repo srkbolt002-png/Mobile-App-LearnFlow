@@ -320,4 +320,48 @@
   img[loading="lazy"] {
     content-visibility: auto;
   }
+  
+  /* GPU acceleration for animations */
+  .will-change-transform {
+    will-change: transform;
+  }
+  
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+  
+  /* Smooth scrolling with momentum on iOS */
+  .momentum-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  
+  /* Disable text size adjust on mobile */
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  
+  /* Disable tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Better button and link active states */
+  button:active,
+  a:active,
+  [role="button"]:active {
+    transform: scale(0.98);
+  }
+  
+  /* Optimize rendering for cards */
+  .card-optimize {
+    contain: layout style paint;
+    content-visibility: auto;
+  }
 }

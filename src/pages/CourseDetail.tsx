@@ -1,21 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { BookOpen, Clock, User as UserIcon, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { BookOpen, Clock, User as UserIcon, CheckCircle2, Circle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { getAvatarColor } from '@/lib/avatarColors';
 import { initializeCourseProgress, getCourseProgress, updateLessonProgress, updateVideoProgress } from '@/lib/progressManager';
 import { createNotification } from '@/lib/notificationManager';
 import { getCourseById, enrollInCourse, isEnrolledInCourse, getCourseEnrollmentCount } from '@/lib/courseManager';
 import { Lesson, getCourseLessons } from '@/lib/lessonManager';
 import { Course } from '@/lib/courseManager';
-import { getWorkshopComments, createComment as createWorkshopComment } from '@/lib/commentManager';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { triggerHaptic } from '@/lib/haptics';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,13 +25,17 @@ interface Comment {
   createdAt: string;
 }
 
-function VideoPlayer({ storagePath, lessonId }: { storagePath: string; lessonId: string }) {
+// Memoized video player component with optimizations
+const VideoPlayer = memo(function VideoPlayer({ storagePath, lessonId }: { storagePath: string; lessonId: string }) {
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     async function getVideoUrl() {
       try {
+        setIsLoading(true);
         const { data } = supabase.storage
           .from('lesson-videos')
           .getPublicUrl(storagePath);
@@ -46,23 +47,33 @@ function VideoPlayer({ storagePath, lessonId }: { storagePath: string; lessonId:
         }
       } catch (err) {
         setError('Failed to load video');
+      } finally {
+        setIsLoading(false);
       }
     }
     getVideoUrl();
   }, [storagePath]);
 
+  // Preload video metadata for faster start
+  useEffect(() => {
+    if (videoRef.current && videoUrl) {
+      videoRef.current.preload = 'metadata';
+    }
+  }, [videoUrl]);
+
   if (error) {
     return (
       <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive text-sm">{error}</p>
       </div>
     );
   }
 
-  if (!videoUrl) {
+  if (isLoading) {
     return (
-      <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-        <p className="text-muted-foreground">Loading video...</p>
+      <div className="aspect-video bg-muted rounded-lg flex flex-col items-center justify-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading video...</p>
       </div>
     );
   }
@@ -70,14 +81,17 @@ function VideoPlayer({ storagePath, lessonId }: { storagePath: string; lessonId:
   return (
     <div className="aspect-video bg-black rounded-lg overflow-hidden">
       <video
+        ref={videoRef}
         src={videoUrl}
         controls
         className="w-full h-full"
         controlsList="nodownload"
+        playsInline
+        preload="metadata"
       />
     </div>
   );
-}
+});
 
 export default function CourseDetail() {
   const { id } = useParams();
@@ -96,19 +110,20 @@ export default function CourseDetail() {
   const sessionStartRef = useRef<number>(Date.now());
   const lastLessonRef = useRef<number>(currentLesson);
 
-  const goToNextLesson = () => {
+  // Memoize navigation handlers
+  const goToNextLesson = useCallback(() => {
     if (currentLesson < lessons.length - 1) {
-      setCurrentLesson(currentLesson + 1);
+      setCurrentLesson(prev => prev + 1);
       triggerHaptic('light');
     }
-  };
+  }, [currentLesson, lessons.length]);
 
-  const goToPreviousLesson = () => {
+  const goToPreviousLesson = useCallback(() => {
     if (currentLesson > 0) {
-      setCurrentLesson(currentLesson - 1);
+      setCurrentLesson(prev => prev - 1);
       triggerHaptic('light');
     }
-  };
+  }, [currentLesson]);
 
   const swipeHandlers = useSwipeGesture({
     onSwipeLeft: goToNextLesson,
@@ -193,7 +208,7 @@ export default function CourseDetail() {
     setLoading(false);
   };
 
-  const handleEnroll = async () => {
+  const handleEnroll = useCallback(async () => {
     if (!user) {
       toast({ title: 'Please login to enroll', variant: 'destructive' });
       navigate('/login');
@@ -201,6 +216,7 @@ export default function CourseDetail() {
     }
 
     if (course) {
+      triggerHaptic('medium');
       const success = await enrollInCourse(course.id, user.id);
       if (success) {
         // Initialize progress tracking
@@ -224,11 +240,12 @@ export default function CourseDetail() {
         toast({ title: 'Failed to enroll', variant: 'destructive' });
       }
     }
-  };
+  }, [user, course, lessons, navigate, toast]);
 
-  const toggleLessonComplete = async (lessonId: string) => {
+  const toggleLessonComplete = useCallback(async (lessonId: string) => {
     if (!user || !course || !isEnrolled) return;
     
+    triggerHaptic('light');
     const newStatus = !lessonProgress[lessonId];
     await updateLessonProgress(user.id, course.id, lessonId, newStatus, 0);
     
@@ -238,7 +255,7 @@ export default function CourseDetail() {
       title: newStatus ? 'Lesson completed!' : 'Lesson marked incomplete',
       description: newStatus ? 'Keep up the great work!' : undefined
     });
-  };
+  }, [user, course, isEnrolled, lessonProgress, toast]);
 
   const handleComment = async () => {
     if (!user) {

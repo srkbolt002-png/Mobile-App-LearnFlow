@@ -1,14 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { BookOpen, Users, Award, CheckCircle, TrendingUp, Globe, FileText, UserCheck, Rocket, Clock } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { getAvatarColor } from '@/lib/avatarColors';
-import { Course, getCourses } from '@/lib/courseManager';
-import { getCourseLessons } from '@/lib/lessonManager';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BookOpen, Users, Award, Rocket } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { mockCourses, mockUsers, Course } from '@/lib/mockData';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { CourseCard } from '@/components/CourseCard';
+import { triggerHaptic } from '@/lib/haptics';
+import { getAvatarColor } from '@/lib/avatarColors';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -21,8 +20,14 @@ export default function Home() {
 
   const loadCourses = async () => {
     setLoading(true);
-    const allCourses = await getCourses();
-    setCourses(allCourses);
+    // Load from localStorage or use mock data
+    const saved = localStorage.getItem('courses');
+    if (saved) {
+      setCourses(JSON.parse(saved));
+    } else {
+      localStorage.setItem('courses', JSON.stringify(mockCourses));
+      setCourses(mockCourses);
+    }
     setLoading(false);
   };
 
@@ -30,7 +35,13 @@ export default function Home() {
     await loadCourses();
   };
 
-  const featuredCourses = courses.slice(0, 3);
+  // Memoize featured courses
+  const featuredCourses = useMemo(() => courses.slice(0, 3), [courses]);
+  
+  const handleButtonClick = (path: string) => {
+    triggerHaptic('light');
+    navigate(path);
+  };
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="min-h-screen flex flex-col bg-background">
@@ -51,11 +62,11 @@ export default function Home() {
           </p>
           
           <div className="flex flex-col gap-3 max-w-sm mx-auto">
-            <Button size="lg" variant="glow" onClick={() => navigate('/courses')} className="w-full touch-target h-12">
+            <Button size="lg" variant="glow" onClick={() => handleButtonClick('/courses')} className="w-full touch-target h-12">
               Explore Courses
               <BookOpen className="ml-2 h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" onClick={() => navigate('/login')} className="w-full touch-target h-12">
+            <Button size="lg" variant="outline" onClick={() => handleButtonClick('/login')} className="w-full touch-target h-12">
               Login to Your Account
             </Button>
           </div>
@@ -141,66 +152,31 @@ export default function Home() {
             <>
               <div className="grid grid-cols-1 gap-4">
                 {featuredCourses.map((course) => {
-                  const avatarColor = getAvatarColor(course.instructorName);
+                  const instructor = mockUsers.find(u => u.id === course.instructorId);
+                  const instructorName = instructor?.name || 'Unknown';
                   
                   return (
-                    <Card 
-                      key={course.id} 
-                      className="cursor-pointer border shadow-sm active:scale-[0.98] transition-transform" 
-                      onClick={() => navigate(`/course/${course.id}`)}
-                    >
-                      <div className="relative overflow-hidden rounded-t-lg">
-                        <img 
-                          src={course.thumbnail} 
-                          alt={course.title} 
-                          className="w-full h-40 object-cover" 
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </div>
-                      
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Avatar 
-                            className="h-8 w-8 border" 
-                            style={{ backgroundColor: avatarColor }}
-                          >
-                            <AvatarFallback className="text-white text-xs font-semibold">
-                              {course.instructorName[0].toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <CardDescription className="text-xs truncate">
-                            {course.instructorName}
-                          </CardDescription>
-                        </div>
-                        <CardTitle className="line-clamp-2 text-base leading-snug">
-                          {course.title}
-                        </CardTitle>
-                      </CardHeader>
-                      
-                      <CardContent className="pt-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-xs">
-                            {course.category}
-                          </Badge>
-                          <Badge 
-                            variant="secondary" 
-                            className={`text-xs capitalize ${
-                              course.level === 'beginner' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
-                              course.level === 'intermediate' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
-                              'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                            }`}
-                          >
-                            {course.level}
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <CourseCard
+                      key={course.id}
+                      id={course.id}
+                      title={course.title}
+                      description={course.description}
+                      thumbnail={course.thumbnail}
+                      instructorName={instructorName}
+                      category={course.category}
+                      level={course.difficulty}
+                      lessonCount={course.lessons?.length || 0}
+                      enrollmentCount={course.enrolledStudents?.length || 0}
+                      totalDuration={course.lessons?.reduce((acc, l) => {
+                        const mins = parseInt(l.duration);
+                        return acc + (isNaN(mins) ? 0 : mins);
+                      }, 0) || 0}
+                    />
                   );
                 })}
               </div>
               <div className="text-center mt-6">
-                <Button size="lg" variant="secondary" onClick={() => navigate('/courses')} className="w-full max-w-sm touch-target h-12">
+                <Button size="lg" variant="secondary" onClick={() => handleButtonClick('/courses')} className="w-full max-w-sm touch-target h-12">
                   View All Courses
                   <BookOpen className="ml-2 h-5 w-5" />
                 </Button>
