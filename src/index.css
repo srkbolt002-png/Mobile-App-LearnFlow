@@ -227,7 +227,7 @@
   
   /* Enhanced safe area utilities for mobile */
   .safe-top {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
   }
   
   .safe-bottom {
