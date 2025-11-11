@@ -6,8 +6,10 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getUserProgress, formatTimeSpent, CourseProgress, getAchievementDetails } from '@/lib/progressManager';
-import { Course } from '@/lib/mockData';
+import { getUserProgress, formatTimeSpent, CourseProgress, getAchievementDetails, initializeCourseProgress } from '@/lib/progressManager';
+import { getEnrolledCourses, getCourseById } from '@/lib/courseManager';
+import { getCourseLessons } from '@/lib/lessonManager';
+import type { Course } from '@/lib/courseManager';
 import { BookOpen, Clock, CheckCircle2, TrendingUp, Award, Flame, PlayCircle } from 'lucide-react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 
@@ -16,6 +18,7 @@ export default function StudentProgress() {
   const navigate = useNavigate();
   const [progress, setProgress] = useState<CourseProgress[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     if (!user || user.role !== 'student') {
@@ -23,11 +26,62 @@ export default function StudentProgress() {
       return;
     }
 
-    const userProgress = await getUserProgress(user.id);
-    setProgress(userProgress);
-
-    const allCourses = JSON.parse(localStorage.getItem('courses') || '[]');
-    setCourses(allCourses);
+    setLoading(true);
+    
+    try {
+      // 1. Get all enrolled courses from Supabase
+      const enrolledCourses = await getEnrolledCourses(user.id);
+      
+      // 2. Get existing progress records
+      const userProgress = await getUserProgress(user.id);
+      
+      // 3. Create a map of existing progress by courseId
+      const progressMap = new Map(userProgress.map(p => [p.courseId, p]));
+      
+      // 4. Build complete progress list - initialize progress for courses without it
+      const completeProgress: CourseProgress[] = [];
+      
+      for (const course of enrolledCourses) {
+        const existingProgress = progressMap.get(course.id);
+        
+        if (existingProgress) {
+          completeProgress.push(existingProgress);
+        } else {
+          // Initialize progress for courses that don't have it yet
+          const lessons = await getCourseLessons(course.id);
+          if (lessons.length > 0) {
+            const newProgress = await initializeCourseProgress(
+              user.id,
+              course.id,
+              lessons.map(l => l.id)
+            );
+            if (newProgress) {
+              completeProgress.push(newProgress);
+            }
+          } else {
+            // Create a default progress object for courses with no lessons
+            completeProgress.push({
+              courseId: course.id,
+              userId: user.id,
+              enrolledAt: new Date().toISOString(),
+              lastAccessedAt: new Date().toISOString(),
+              totalTimeSpent: 0,
+              completionPercentage: 0,
+              currentStreak: 0,
+              achievements: [],
+              lessons: []
+            });
+          }
+        }
+      }
+      
+      setProgress(completeProgress);
+      setCourses(enrolledCourses);
+    } catch (error) {
+      console.error('Error loading progress:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -52,6 +106,7 @@ export default function StudentProgress() {
     ? Math.round(progress.reduce((acc, p) => acc + p.completionPercentage, 0) / progress.length)
     : 0;
 
+  // Categorize courses properly
   const inProgressCourses = progress.filter(p => p.completionPercentage > 0 && p.completionPercentage < 100);
   const completedCourses = progress.filter(p => p.completionPercentage === 100);
   const notStartedCourses = progress.filter(p => p.completionPercentage === 0);
@@ -112,6 +167,30 @@ export default function StudentProgress() {
       </Card>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="w-full px-4 py-6 pb-[calc(5rem+var(--sab))]">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">My Progress</h1>
+          <p className="text-sm text-muted-foreground">Track your learning journey</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="p-3 pb-2">
+                <div className="h-4 bg-muted rounded w-16" />
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="h-8 bg-muted rounded w-12 mb-1" />
+                <div className="h-3 bg-muted rounded w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
@@ -252,7 +331,7 @@ export default function StudentProgress() {
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
                 <CheckCircle2 className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">You've started all courses!</p>
+                <p className="text-sm">You've started all enrolled courses!</p>
               </CardContent>
             </Card>
           ) : (
